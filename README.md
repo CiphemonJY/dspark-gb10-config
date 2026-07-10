@@ -31,9 +31,10 @@ simultaneous-full-1M concurrency), boots fully offline from the HF cache.
    ([patches/worker-hca-override.patch](patches/worker-hca-override.patch)). Verify with
    `docker logs <container> | grep NET/IB` → must show `Using [0]<hca>:1/RoCE`.
 
-2. **`MAX_NUM_SEQS` 12 → 6 doubled the KV cache pool** (1.44M → 2.99M tokens at the same
-   `gpu-memory-utilization 0.85`) — fewer reserved decode slots and a smaller cudagraph ladder.
-   The pool is demand-allocated, so short-prompt traffic keeps all 6 slots usable.
+2. **`MAX_NUM_SEQS` 12 → 6 doubled the KV cache pool** — 1.44M → 2.99M tokens at the same
+   `gpu-memory-utilization 0.85` (measured at MTP=3; the MTP=5 bump below trims it to the
+   deployed 2.94M) — fewer reserved decode slots and a smaller cudagraph ladder. The pool is
+   demand-allocated, so short-prompt traffic keeps all 6 slots usable.
 
 3. **`MTP_NUM_TOKENS` (DSpark speculative depth) 3 → 5 only pays on RDMA.** On TCP NCCL it was
    throughput-neutral: each extra draft pass is another sequential hop over the interconnect, and
