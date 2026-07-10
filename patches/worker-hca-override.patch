@@ -1,0 +1,15 @@
+Per-node NCCL HCA override for start-deepseek-v4-flash-dspark.sh.
+
+The upstream start script scp's .env.dspark to the worker verbatim and only overrides
+NODE_RANK/HEADLESS/HF_CACHE/VLLM_HOST_IP per node. When the worker's RDMA HCA name differs
+from the head's, NCCL_NET=IB fails on rank 1 ("NET/IB : No device found"). This adds the
+worker's HCA (exact-match "=name:port" syntax) to the worker launch env, using the same
+shell-env-beats-env-file compose interpolation mechanism the script already uses for
+VLLM_HOST_IP. Replace rocep1s0f1 with your worker's HCA (see `ibv_devinfo`).
+
+--- a/start-deepseek-v4-flash-dspark.sh
++++ b/start-deepseek-v4-flash-dspark.sh
+@@ -41,7 +41,7 @@
+ echo "Starting DSpark worker on ${WORKER_HOST}..."
+-ssh "$WORKER_HOST" "$REMOTE_COMPOSE NODE_RANK=1 HEADLESS=1 HF_CACHE='$WORKER_HF_CACHE' VLLM_HOST_IP='$WORKER_VLLM_HOST_IP' docker compose --env-file .env.dspark -f docker-compose.dspark.yml up -d"
++ssh "$WORKER_HOST" "$REMOTE_COMPOSE NODE_RANK=1 HEADLESS=1 HF_CACHE='$WORKER_HF_CACHE' VLLM_HOST_IP='$WORKER_VLLM_HOST_IP' NCCL_IB_HCA==rocep1s0f1:1 docker compose --env-file .env.dspark -f docker-compose.dspark.yml up -d"
