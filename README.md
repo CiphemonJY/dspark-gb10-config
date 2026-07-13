@@ -21,7 +21,7 @@ tuned serving profile and one launch-script fix we validated in production, plus
 Context ceiling 262,144 → **1,048,576** tokens, KV pool 1.44M → **2.94M tokens** (2.80×
 simultaneous-full-1M concurrency), boots fully offline from the HF cache.
 
-## The three findings that matter
+## The four findings that matter
 
 1. **"RoCE is flaky" was a config bug, not a fabric problem.** The upstream start script copies
    `.env.dspark` to the worker verbatim, so the worker inherits the *head's* HCA name. If your
@@ -43,12 +43,24 @@ simultaneous-full-1M concurrency), boots fully offline from the HF cache.
    are the documented cold-start garble root cause. Note: vLLM truncates the requested capture
    size 36 → 32; the ladder still contains a multiple of (k+1)=6, which is what DSpark requires.
 
+4. **Lowering `gpu-memory-utilization` to reclaim host RAM bricks the boot unless you drop
+   `max-model-len` with it.** The KV pool is `util × total − weights`, and the weights (~78 GB/node)
+   eat almost the whole budget, so a util cut collapses KV far faster than the delta suggests
+   (0.85 → 0.70 took the pool 19.5 → 3.12 GiB). Drop util alone and vLLM can't hold one
+   `max-model-len` request and refuses to start; also bumping `MAX_NUM_SEQS` makes it worse (bigger
+   cudagraph ladder — findings #2/#3, same coupling). Couple them instead: `util 0.75` +
+   `max-model-len 65536` frees ~12 GiB and still holds ~20× the real workload. To *add* concurrency,
+   raise `MAX_NUM_SEQS` alone. Full field guide + measured banners:
+   [memory-tuning.md](memory-tuning.md).
+
 ## Files
 
 - [`env.dspark.example`](env.dspark.example) — the full tuned profile (sanitize-adapted: replace
   hostnames/IPs/HCA names with yours).
 - [`patches/worker-hca-override.patch`](patches/worker-hca-override.patch) — the one-line
   start-script fix for asymmetric HCA names.
+- [`memory-tuning.md`](memory-tuning.md) — the KV-pool coupling: reclaiming unified memory (or
+  adding concurrency) without bricking the boot, with measured banners.
 
 ## Caveats
 
